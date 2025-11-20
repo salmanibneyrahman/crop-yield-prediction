@@ -24,7 +24,6 @@ print("LOADING DATA...")
 print("=" * 80)
 
 # Load your dataset
-df = pd.read_csv('c:\Pendrive backup\CSE\Capstone\SPAS_Dataset_200000_short_months.csv')
 
 print(f"Dataset shape: {df.shape}")
 
