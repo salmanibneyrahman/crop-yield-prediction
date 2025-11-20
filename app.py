@@ -192,14 +192,6 @@ st.markdown("""
         font-weight: 700;
     }
     
-    .progress-bar {
-        background: linear-gradient(90deg, #00d4ff, #00ff88);
-        height: 8px;
-        border-radius: 10px;
-        margin: 8px 0;
-        box-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
-    }
-    
     </style>
 """, unsafe_allow_html=True)
 
@@ -228,24 +220,28 @@ def load_models_and_encoders():
         st.error(f"Error loading models: {e}")
         return None
 
-def get_location_data():
-    """Auto-detect location via IP APIs"""
+# ============================================================================
+# AUTO-DETECTION FUNCTIONS - FROM YOUR NOTEBOOK
+# ============================================================================
+
+def get_user_location_data():
+    """Try multiple APIs for location detection - EXACTLY FROM YOUR NOTEBOOK"""
     apis = [
+        {
+            'name': 'ipapi.co',
+            'url': 'https://ipapi.co/json',
+            'parser': lambda d: {'city': d.get('city'), 'latitude': d.get('latitude'), 'longitude': d.get('longitude')}
+        },
         {
             'name': 'ip-api.com',
             'url': 'http://ip-api.com/json',
             'parser': lambda d: {'city': d.get('city'), 'lat': d.get('lat'), 'lon': d.get('lon')}
-        },
-        {
-            'name': 'ipapi.co',
-            'url': 'https://ipapi.co/json',
-            'parser': lambda d: {'city': d.get('city'), 'lat': d.get('latitude'), 'lon': d.get('longitude')}
         }
     ]
     
     for api in apis:
         try:
-            response = requests.get(api['url'], timeout=3)
+            response = requests.get(api['url'], timeout=5)
             if response.status_code == 200:
                 data = response.json()
                 location = api['parser'](data)
@@ -255,10 +251,11 @@ def get_location_data():
             continue
     return None
 
-def get_weather_data(lat, lon):
-    """Fetch weather data from Open-Meteo API"""
+def get_weather_data(latitude, longitude):
+    """Fetch complete weather data from Open-Meteo API - EXACTLY FROM YOUR NOTEBOOK"""
     try:
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min,relative_humidity_2m_max,relative_humidity_2m_min"
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current=temperature_2m,relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min,relative_humidity_2m_max,relative_humidity_2m_min"
+        
         response = requests.get(url, timeout=5)
         
         if response.status_code == 200:
@@ -266,14 +263,16 @@ def get_weather_data(lat, lon):
             current = data.get('current', {})
             daily = data.get('daily', {})
             
-            return {
+            weather = {
                 'avg_temp': current.get('temperature_2m'),
-                'avg_humidity': current.get('relative_humidity_2m'),
                 'min_temp': daily.get('temperature_2m_min', [None])[0] if daily.get('temperature_2m_min') else None,
                 'max_temp': daily.get('temperature_2m_max', [None])[0] if daily.get('temperature_2m_max') else None,
+                'avg_humidity': current.get('relative_humidity_2m'),
                 'min_humidity': daily.get('relative_humidity_2m_min', [None])[0] if daily.get('relative_humidity_2m_min') else None,
                 'max_humidity': daily.get('relative_humidity_2m_max', [None])[0] if daily.get('relative_humidity_2m_max') else None
             }
+            
+            return weather
     except:
         pass
     return None
@@ -320,63 +319,46 @@ with col1:
     </div>
     """, unsafe_allow_html=True)
     
-    location_data = get_location_data()
+    # Auto-detect location & weather
+    location_data = get_user_location_data()
     weather_data = None
     
     if location_data:
-        st.info(f"📍 Location Auto-Detected: {location_data['city']}")
-        weather_data = get_weather_data(location_data['lat'], location_data['lon'])
-        if weather_data:
-            st.success(f"🌡️ Weather Data Fetched: {weather_data['avg_temp']:.1f}°C (Range: {weather_data['min_temp']:.1f}°C - {weather_data['max_temp']:.1f}°C)")
+        weather_data = get_weather_data(location_data.get('latitude') or location_data.get('lat'), 
+                                       location_data.get('longitude') or location_data.get('lon'))
     
     # District Selection
-    st.subheader("1️⃣ DISTRICT")
+    st.subheader(" DISTRICT")
     available_districts = list(models['district_encoder'].classes_)
-    auto_district = location_data['city'] if location_data else None
     
+    auto_district = location_data['city'] if location_data else None
     if auto_district and auto_district in available_districts:
-        col_confirm, col_manual = st.columns([2, 1])
-        with col_confirm:
-            use_auto = st.checkbox(f"Use auto-detected: {auto_district}?", value=True, key="district_auto")
-        if use_auto:
-            selected_district = auto_district
-        else:
-            selected_district = st.selectbox("Select District", available_districts)
+        use_auto = st.checkbox(f"Use auto-detected: {auto_district}?", value=True, key="district_auto")
+        selected_district = auto_district if use_auto else st.selectbox("Select District", available_districts)
     else:
         selected_district = st.selectbox("Select District", available_districts)
     
-    # Area
-    st.subheader("2️⃣ CULTIVATED AREA (hectares)")
-    col_area_min, col_area_avg, col_area_max = st.columns(3)
+    # Area - Manual Input Only
+    st.subheader(" CULTIVATED AREA (hectares)")
+    area_hectares = st.number_input("Area", value=5.0, min_value=0.5, max_value=100.0, step=0.5)
     
-    with col_area_min:
-        area_min = st.number_input("Min Area", value=0.5, step=0.1, key="area_min")
+    # Temperature - EXACTLY LIKE YOUR NOTEBOOK
+    st.subheader(" TEMPERATURE CONDITIONS")
     
-    with col_area_avg:
-        area_avg = st.number_input("Avg Area", value=5.0, step=0.1, key="area_avg")
-    
-    with col_area_max:
-        area_max = st.number_input("Max Area", value=10.0, step=0.1, key="area_max")
-    
-    area_hectares = area_avg
-    
-    # Temperature
-    st.subheader("3️⃣ TEMPERATURE CONDITIONS")
-    
-    if weather_data and weather_data['min_temp']:
+    if weather_data and all([weather_data.get('min_temp'), weather_data.get('avg_temp'), weather_data.get('max_temp')]):
         col_min, col_avg, col_max = st.columns(3)
         
         with col_min:
-            auto_min = st.checkbox(f"Auto: {weather_data['min_temp']:.1f}°C?", value=True, key="temp_min_auto")
-            min_temp = weather_data['min_temp'] if auto_min else st.number_input("Min Temp (°C)", value=18.0, key="temp_min_manual")
+            use_min = st.checkbox(f"Auto: {weather_data['min_temp']:.1f}°C?", value=True, key="temp_min")
+            min_temp = weather_data['min_temp'] if use_min else st.number_input("Min Temp (°C)", value=18.0, key="temp_min_manual")
         
         with col_avg:
-            auto_avg = st.checkbox(f"Auto: {weather_data['avg_temp']:.1f}°C?", value=True, key="temp_avg_auto")
-            avg_temp = weather_data['avg_temp'] if auto_avg else st.number_input("Avg Temp (°C)", value=25.0, key="temp_avg_manual")
+            use_avg = st.checkbox(f"Auto: {weather_data['avg_temp']:.1f}°C?", value=True, key="temp_avg")
+            avg_temp = weather_data['avg_temp'] if use_avg else st.number_input("Avg Temp (°C)", value=25.0, key="temp_avg_manual")
         
         with col_max:
-            auto_max = st.checkbox(f"Auto: {weather_data['max_temp']:.1f}°C?", value=True, key="temp_max_auto")
-            max_temp = weather_data['max_temp'] if auto_max else st.number_input("Max Temp (°C)", value=32.0, key="temp_max_manual")
+            use_max = st.checkbox(f"Auto: {weather_data['max_temp']:.1f}°C?", value=True, key="temp_max")
+            max_temp = weather_data['max_temp'] if use_max else st.number_input("Max Temp (°C)", value=32.0, key="temp_max_manual")
     else:
         col_min, col_avg, col_max = st.columns(3)
         with col_min:
@@ -386,34 +368,34 @@ with col1:
         with col_max:
             max_temp = st.number_input("Max Temp (°C)", value=32.0)
     
-    # Humidity
-    st.subheader("4️⃣ HUMIDITY CONDITIONS (%)")
+    # Humidity - EXACTLY LIKE YOUR NOTEBOOK
+    st.subheader(" HUMIDITY CONDITIONS (%)")
     
-    if weather_data and weather_data['min_humidity']:
+    if weather_data and all([weather_data.get('min_humidity'), weather_data.get('avg_humidity'), weather_data.get('max_humidity')]):
         col_min_hum, col_avg_hum, col_max_hum = st.columns(3)
         
         with col_min_hum:
-            auto_min_hum = st.checkbox(f"Auto: {weather_data['min_humidity']:.0f}%?", value=True, key="hum_min_auto")
-            min_humidity = weather_data['min_humidity'] if auto_min_hum else st.number_input("Min Humidity (%)", value=40, key="min_hum_manual")
+            use_min_hum = st.checkbox(f"Auto: {weather_data['min_humidity']:.0f}%?", value=True, key="hum_min")
+            min_humidity = weather_data['min_humidity'] if use_min_hum else st.number_input("Min Humidity (%)", value=40, min_value=0, max_value=100, key="hum_min_manual")
         
         with col_avg_hum:
-            auto_avg_hum = st.checkbox(f"Auto: {weather_data['avg_humidity']:.0f}%?", value=True, key="hum_avg_auto")
-            avg_humidity = weather_data['avg_humidity'] if auto_avg_hum else st.number_input("Avg Humidity (%)", value=70, key="avg_hum_manual")
+            use_avg_hum = st.checkbox(f"Auto: {weather_data['avg_humidity']:.0f}%?", value=True, key="hum_avg")
+            avg_humidity = weather_data['avg_humidity'] if use_avg_hum else st.number_input("Avg Humidity (%)", value=70, min_value=0, max_value=100, key="hum_avg_manual")
         
         with col_max_hum:
-            auto_max_hum = st.checkbox(f"Auto: {weather_data['max_humidity']:.0f}%?", value=True, key="hum_max_auto")
-            max_humidity = weather_data['max_humidity'] if auto_max_hum else st.number_input("Max Humidity (%)", value=95, key="max_hum_manual")
+            use_max_hum = st.checkbox(f"Auto: {weather_data['max_humidity']:.0f}%?", value=True, key="hum_max")
+            max_humidity = weather_data['max_humidity'] if use_max_hum else st.number_input("Max Humidity (%)", value=95, min_value=0, max_value=100, key="hum_max_manual")
     else:
         col_min_hum, col_avg_hum, col_max_hum = st.columns(3)
         with col_min_hum:
-            min_humidity = st.number_input("Min Humidity (%)", value=40, key="min_hum")
+            min_humidity = st.number_input("Min Humidity (%)", value=40, min_value=0, max_value=100)
         with col_avg_hum:
-            avg_humidity = st.number_input("Avg Humidity (%)", value=70, key="avg_hum")
+            avg_humidity = st.number_input("Avg Humidity (%)", value=70, min_value=0, max_value=100)
         with col_max_hum:
-            max_humidity = st.number_input("Max Humidity (%)", value=95, key="max_hum")
+            max_humidity = st.number_input("Max Humidity (%)", value=95, min_value=0, max_value=100)
     
     # Season
-    st.subheader("5️⃣ SEASON")
+    st.subheader(" SEASON")
     available_seasons = list(models['season_encoder'].classes_)
     selected_season = st.selectbox("Select Season", available_seasons)
 
@@ -472,11 +454,11 @@ with col2:
         
         st.write("")
         st.write("FARM SUMMARY")
-        st.write(f"📍 District: {selected_district}")
-        st.write(f"🌾 Season: {selected_season}")
-        st.write(f"📐 Area: {area_hectares:.1f} hectares")
-        st.write(f"🌡️ Temperature: {min_temp:.1f}°C - {max_temp:.1f}°C (Avg: {avg_temp:.1f}°C)")
-        st.write(f"💧 Humidity: {min_humidity:.0f}% - {max_humidity:.0f}% (Avg: {avg_humidity:.0f}%)")
+        st.write(f"District: {selected_district}")
+        st.write(f"Season: {selected_season}")
+        st.write(f"Area: {area_hectares:.1f} hectares")
+        st.write(f"Temperature: {min_temp:.1f}°C - {max_temp:.1f}°C (Avg: {avg_temp:.1f}°C)")
+        st.write(f"Humidity: {min_humidity:.0f}% - {max_humidity:.0f}% (Avg: {avg_humidity:.0f}%)")
         
         st.markdown("</div>", unsafe_allow_html=True)
 
