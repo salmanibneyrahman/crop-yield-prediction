@@ -311,7 +311,7 @@ if models is None:
     st.error("Could not load models. Please ensure all .pkl files are in the same folder as app.py")
     st.stop()
 
-col1, col2 = st.columns([2.5, 1.5])
+col1, col2 = st.columns([1, 1])
 
 with col1:
     st.markdown("""
@@ -346,8 +346,19 @@ with col1:
         selected_district = st.selectbox("Select District", available_districts)
     
     # Area
-    st.subheader("2️⃣ CULTIVATED AREA")
-    area_hectares = st.slider("Area (hectares)", min_value=0.5, max_value=100.0, value=5.0, step=0.5)
+    st.subheader("2️⃣ CULTIVATED AREA (hectares)")
+    col_area_min, col_area_avg, col_area_max = st.columns(3)
+    
+    with col_area_min:
+        area_min = st.number_input("Min Area", value=0.5, step=0.1, key="area_min")
+    
+    with col_area_avg:
+        area_avg = st.number_input("Avg Area", value=5.0, step=0.1, key="area_avg")
+    
+    with col_area_max:
+        area_max = st.number_input("Max Area", value=10.0, step=0.1, key="area_max")
+    
+    area_hectares = area_avg
     
     # Temperature
     st.subheader("3️⃣ TEMPERATURE CONDITIONS")
@@ -376,30 +387,30 @@ with col1:
             max_temp = st.number_input("Max Temp (°C)", value=32.0)
     
     # Humidity
-    st.subheader("4️⃣ HUMIDITY CONDITIONS")
+    st.subheader("4️⃣ HUMIDITY CONDITIONS (%)")
     
     if weather_data and weather_data['min_humidity']:
         col_min_hum, col_avg_hum, col_max_hum = st.columns(3)
         
         with col_min_hum:
             auto_min_hum = st.checkbox(f"Auto: {weather_data['min_humidity']:.0f}%?", value=True, key="hum_min_auto")
-            min_humidity = weather_data['min_humidity'] if auto_min_hum else st.slider("Min Humidity (%)", 0, 100, 40, key="min_hum_manual")
+            min_humidity = weather_data['min_humidity'] if auto_min_hum else st.number_input("Min Humidity (%)", value=40, key="min_hum_manual")
         
         with col_avg_hum:
             auto_avg_hum = st.checkbox(f"Auto: {weather_data['avg_humidity']:.0f}%?", value=True, key="hum_avg_auto")
-            avg_humidity = weather_data['avg_humidity'] if auto_avg_hum else st.slider("Avg Humidity (%)", 0, 100, 70, key="avg_hum_manual")
+            avg_humidity = weather_data['avg_humidity'] if auto_avg_hum else st.number_input("Avg Humidity (%)", value=70, key="avg_hum_manual")
         
         with col_max_hum:
             auto_max_hum = st.checkbox(f"Auto: {weather_data['max_humidity']:.0f}%?", value=True, key="hum_max_auto")
-            max_humidity = weather_data['max_humidity'] if auto_max_hum else st.slider("Max Humidity (%)", 0, 100, 95, key="max_hum_manual")
+            max_humidity = weather_data['max_humidity'] if auto_max_hum else st.number_input("Max Humidity (%)", value=95, key="max_hum_manual")
     else:
         col_min_hum, col_avg_hum, col_max_hum = st.columns(3)
         with col_min_hum:
-            min_humidity = st.slider("Min Humidity (%)", 0, 100, 40, key="min_hum")
+            min_humidity = st.number_input("Min Humidity (%)", value=40, key="min_hum")
         with col_avg_hum:
-            avg_humidity = st.slider("Avg Humidity (%)", 0, 100, 70, key="avg_hum")
+            avg_humidity = st.number_input("Avg Humidity (%)", value=70, key="avg_hum")
         with col_max_hum:
-            max_humidity = st.slider("Max Humidity (%)", 0, 100, 95, key="max_hum")
+            max_humidity = st.number_input("Max Humidity (%)", value=95, key="max_hum")
     
     # Season
     st.subheader("5️⃣ SEASON")
@@ -407,44 +418,23 @@ with col1:
     selected_season = st.selectbox("Select Season", available_seasons)
 
 with col2:
+    st.markdown("---")
     st.markdown("""
     <div class="section-header">
-        REFERENCE DATA
+        AI PREDICTIONS
     </div>
     """, unsafe_allow_html=True)
     
-    sample_df = pd.DataFrame({
-        'District': ['Dhaka', 'Rajshahi', 'Nilphamari'],
-        'Area (ha)': [4000, 3500, 5876],
-        'Avg Temp': [20.5, 21.0, 32.0],
-        'Humidity': [76, 72, 78]
-    })
-    st.dataframe(sample_df, use_container_width=True, hide_index=True)
-
-st.markdown("---")
-
-# ============================================================================
-# PREDICTIONS
-# ============================================================================
-st.markdown("""
-<div class="section-header">
-    AI PREDICTIONS & RECOMMENDATIONS
-</div>
-""", unsafe_allow_html=True)
-
-try:
-    season_encoded = models['season_encoder'].transform([selected_season])[0]
-    district_encoded = models['district_encoder'].transform([selected_district])[0]
-    
-    yield_features = np.array([[area_hectares, avg_temp, avg_humidity, max_temp, min_temp, max_humidity, min_humidity]])
-    crop_features = np.array([[avg_temp, avg_humidity, max_temp, min_temp, max_humidity, min_humidity, season_encoded, district_encoded]])
-    
-    predicted_yield = models['yield'].predict(yield_features)[0]
-    total_production = predicted_yield * area_hectares
-    
-    col_crop, col_yield = st.columns(2)
-    
-    with col_crop:
+    try:
+        season_encoded = models['season_encoder'].transform([selected_season])[0]
+        district_encoded = models['district_encoder'].transform([selected_district])[0]
+        
+        yield_features = np.array([[area_hectares, avg_temp, avg_humidity, max_temp, min_temp, max_humidity, min_humidity]])
+        crop_features = np.array([[avg_temp, avg_humidity, max_temp, min_temp, max_humidity, min_humidity, season_encoded, district_encoded]])
+        
+        predicted_yield = models['yield'].predict(yield_features)[0]
+        total_production = predicted_yield * area_hectares
+        
         st.markdown("""
         <div class="result-box">
         <h3 style="color: #00ff88; margin-bottom: 10px;">RECOMMENDED CROP VARIETY</h3>
@@ -452,16 +442,13 @@ try:
         
         if hasattr(models['crop'], 'predict_proba'):
             probas = models['crop'].predict_proba(crop_features)[0]
-            top_5_indices = np.argsort(probas)[-5:][::-1]
-            top_5_crops = models['crop_encoder'].classes_[top_5_indices]
-            top_5_confidences = probas[top_5_indices] * 100
+            top_1_index = np.argmax(probas)
+            recommended_crop = models['crop_encoder'].classes_[top_1_index]
+            confidence = probas[top_1_index] * 100
         else:
             pred_idx = models['crop'].predict(crop_features)[0]
-            top_5_crops = np.array([models['crop_encoder'].classes_[pred_idx]])
-            top_5_confidences = np.array([90.0])
-        
-        recommended_crop = top_5_crops[0]
-        confidence = top_5_confidences[0]
+            recommended_crop = models['crop_encoder'].classes_[pred_idx]
+            confidence = 90.0
         
         st.markdown(f"""
         <div style="text-align: center; padding: 20px; background: rgba(0, 255, 136, 0.05); border-radius: 10px; margin: 15px 0;">
@@ -470,18 +457,8 @@ try:
         </div>
         """, unsafe_allow_html=True)
         
-        st.write("")
-        st.write("TOP 5 ALTERNATIVE CROPS")
-        
-        for rank, (crop, conf) in enumerate(zip(top_5_crops[:5], top_5_confidences[:5]), 1):
-            bar_length = 20
-            filled = int(bar_length * conf / 100)
-            bar = "█" * filled + "░" * (bar_length - filled)
-            st.write(f"{rank}. {crop:15} {bar} {conf:6.1f}%")
-        
         st.markdown("</div>", unsafe_allow_html=True)
-    
-    with col_yield:
+        
         st.markdown("""
         <div class="result-box">
         <h3 style="color: #00d4ff; margin-bottom: 20px;">YIELD FORECAST</h3>
@@ -503,16 +480,7 @@ try:
         
         st.markdown("</div>", unsafe_allow_html=True)
 
-except Exception as e:
-    st.error(f"Error making predictions: {str(e)}")
+    except Exception as e:
+        st.error(f"Error making predictions: {str(e)}")
 
 st.markdown("---")
-
-# Footer
-st.markdown("""
-<div style="text-align: center; color: #00d4ff; padding: 20px; margin-top: 40px;">
-    <p style="font-size: 0.9em; opacity: 0.7;">
-    CROP YIELD PREDICTION SYSTEM | Powered by Advanced ML | Agricultural Intelligence
-    </p>
-</div>
-""", unsafe_allow_html=True)
