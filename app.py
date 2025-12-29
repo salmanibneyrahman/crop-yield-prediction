@@ -198,6 +198,96 @@ st.markdown("""
         margin: 5px 0;
     }
 </style>
+
+<script>
+window.addEventListener('load', function() {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            function(position) {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+                
+                // Store coordinates
+                sessionStorage.setItem('user_lat', lat);
+                sessionStorage.setItem('user_lon', lon);
+                
+                // Try multiple geocoding services in sequence
+                async function tryGeocode() {
+                    // Nominatim (OpenStreetMap)
+                    try {
+                        const response1 = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10&addressdetails=1`, {
+                            headers: { 'Accept-Language': 'en' }
+                        });
+                        if (response1.ok) {
+                            const data = response1.json().then(data => {
+                                const city = data.address?.city || data.address?.town || data.address?.village || data.address?.county || '';
+                                const country = data.address?.country || '';
+                                if (city && country) {
+                                    sessionStorage.setItem('user_city', city);
+                                    sessionStorage.setItem('user_country', country);
+                                    console.log(`✓ Location via Nominatim: ${city}, ${country}`);
+                                    return true;
+                                }
+                                return false;
+                            });
+                            if (await data) return;
+                        }
+                    } catch (e) { console.log('Nominatim failed'); }
+                    
+                    // Fallback: Use Google Reverse Geocoding (free tier)
+                    try {
+                        const response2 = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lon}&key=AIzaSyBHaYvJx9FLdLO0l1dGJxqzfqF-GVzMGJQ`);
+                        if (response2.ok) {
+                            const data = response2.json().then(data => {
+                                if (data.results && data.results.length > 0) {
+                                    const address = data.results[0].formatted_address;
+                                    const parts = address.split(',').map(p => p.trim());
+                                    const city = parts[parts.length - 3] || parts[0] || '';
+                                    const country = parts[parts.length - 1] || '';
+                                    if (city && country) {
+                                        sessionStorage.setItem('user_city', city);
+                                        sessionStorage.setItem('user_country', country);
+                                        console.log(`✓ Location via Google: ${city}, ${country}`);
+                                        return true;
+                                    }
+                                }
+                                return false;
+                            });
+                            if (await data) return;
+                        }
+                    } catch (e) { console.log('Google failed'); }
+                    
+                    // Fallback: LocationIQ
+                    try {
+                        const response3 = await fetch(`https://us1.locationiq.com/v1/reverse?key=pk.7a3d2a1e9c5f6b2d8a4c9e1f&lat=${lat}&lon=${lon}&format=json`);
+                        if (response3.ok) {
+                            const data = response3.json().then(data => {
+                                const city = data.address?.city || data.address?.town || '';
+                                const country = data.address?.country || '';
+                                if (city && country) {
+                                    sessionStorage.setItem('user_city', city);
+                                    sessionStorage.setItem('user_country', country);
+                                    console.log(`✓ Location via LocationIQ: ${city}, ${country}`);
+                                    return true;
+                                }
+                                return false;
+                            });
+                            if (await data) return;
+                        }
+                    } catch (e) { console.log('LocationIQ failed'); }
+                    
+                    console.log('All geocoding services exhausted');
+                }
+                
+                tryGeocode();
+            },
+            function(error) {
+                console.log('Geolocation permission denied or unavailable');
+            }
+        );
+    }
+});
+</script>
 """, unsafe_allow_html=True)
 
 @st.cache_resource
@@ -220,6 +310,26 @@ def load_models_and_encoders():
     except Exception as e:
         st.error(f"Error loading models: {e}")
         return None
+
+def get_user_location_data():
+    """Get location from browser geolocation stored in sessionStorage"""
+    try:
+        lat = st.session_state.get('user_lat')
+        lon = st.session_state.get('user_lon')
+        city = st.session_state.get('user_city', 'Unknown')
+        country = st.session_state.get('user_country', 'Unknown')
+        
+        if lat and lon:
+            return {
+                'city': city,
+                'latitude': lat,
+                'longitude': lon,
+                'country': country
+            }
+    except:
+        pass
+    
+    return None
 
 def get_weather_data(latitude, longitude):
     """Fetch complete weather data from Open-Meteo API"""
@@ -245,20 +355,6 @@ def get_weather_data(latitude, longitude):
         pass
     
     return None
-
-def get_location_name(latitude, longitude):
-    """Get city and country name from coordinates"""
-    try:
-        url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={latitude}&lon={longitude}"
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            city = data.get('address', {}).get('city') or data.get('address', {}).get('town') or data.get('address', {}).get('village') or 'Unknown'
-            country = data.get('address', {}).get('country', 'Unknown')
-            return city, country
-    except:
-        pass
-    return 'Unknown', 'Unknown'
 
 st.title("🌾 CROP YIELD PREDICTION SYSTEM")
 
@@ -321,39 +417,39 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-data_entry_mode = st.radio("Select your preference", options=["Auto-Detect from GPS Coordinates", "Manual Entry"], key="entry_mode")
+data_entry_mode = st.radio("Select your preference", options=["Auto-Detect from Location", "Manual Entry"], key="entry_mode")
 
 st.markdown("---")
 
-if data_entry_mode == "Auto-Detect from GPS Coordinates":
+if data_entry_mode == "Auto-Detect from Location":
     st.markdown("""
     <div class="section-header">
-        Auto-Detect Mode - Enter GPS Coordinates
+        Auto-Detect Mode - Getting Your Real Location...
     </div>
     """, unsafe_allow_html=True)
     
-    col1, col2 = st.columns(2)
+    st.info("ℹ️ Please allow location access in your browser for accurate geolocation. Refresh the page if location doesn't appear after 3 seconds.")
     
-    with col1:
-        st.subheader("📍 GPS Coordinates")
-        latitude = st.number_input("Latitude", value=23.8103, min_value=-90.0, max_value=90.0, step=0.0001, format="%.4f", help="Enter your latitude (e.g., 23.8103 for Dhaka)")
+    location_data = get_user_location_data()
+    weather_data = None
     
-    with col2:
-        st.subheader("📍 GPS Coordinates")
-        longitude = st.number_input("Longitude", value=90.4125, min_value=-180.0, max_value=180.0, step=0.0001, format="%.4f", help="Enter your longitude (e.g., 90.4125 for Dhaka)")
-    
-    # Get location name and weather
-    city, country = get_location_name(latitude, longitude)
-    weather_data = get_weather_data(latitude, longitude)
+    if location_data:
+        weather_data = get_weather_data(
+            location_data.get('latitude'),
+            location_data.get('longitude')
+        )
     
     col1, col2 = st.columns([1, 1])
     
     with col1:
         st.subheader("Detected Location")
-        st.write(f"**City:** {city}")
-        st.write(f"**Country:** {country}")
-        st.write(f"**Latitude:** {latitude:.4f}")
-        st.write(f"**Longitude:** {longitude:.4f}")
+        if location_data:
+            st.write(f"**City:** {location_data.get('city', 'Unknown')}")
+            st.write(f"**Country:** {location_data.get('country', 'Unknown')}")
+            st.write(f"**Latitude:** {location_data.get('latitude'):.4f}")
+            st.write(f"**Longitude:** {location_data.get('longitude'):.4f}")
+        else:
+            st.warning("⚠️ Location not detected yet. Please allow browser location access or use Manual Entry mode. This may take 3-5 seconds.")
         
         st.subheader("Weather Data")
         if weather_data:
