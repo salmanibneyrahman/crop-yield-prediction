@@ -248,17 +248,59 @@ def get_weather_data(latitude, longitude):
     return None
 
 def get_city_from_coordinates(lat, lon):
-    """Get city name from latitude and longitude using Nominatim"""
+    """Get city name from latitude and longitude using multiple geocoding services with retry logic"""
+    
+    # Method 1: Open-Meteo Geocoding (Most reliable for Bangladesh)
     try:
-        url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}"
+        url = f"https://geocoding-api.open-meteo.com/v1/search?latitude={lat}&longitude={lon}&format=json&language=en"
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
             data = response.json()
-            city = data.get('address', {}).get('city') or data.get('address', {}).get('town') or data.get('address', {}).get('village') or 'Unknown'
-            country = data.get('address', {}).get('country', 'Unknown')
-            return city, country
-    except:
+            results = data.get('results', [])
+            if results:
+                result = results[0]
+                city = result.get('name', '')
+                country = result.get('country', 'Unknown')
+                if city and city.strip():
+                    return city, country
+    except Exception as e:
+        st.write(f"Debug: Open-Meteo failed: {e}")
+    
+    # Method 2: Nominatim (OpenStreetMap) with User-Agent
+    try:
+        url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}&zoom=12&addressdetails=1"
+        headers = {'User-Agent': 'CropYieldPredictionApp/1.0'}
+        response = requests.get(url, timeout=5, headers=headers)
+        if response.status_code == 200:
+            data = response.json()
+            address = data.get('address', {})
+            # Try different address levels for Bangladesh
+            city = (address.get('city') or 
+                   address.get('town') or 
+                   address.get('village') or 
+                   address.get('county') or
+                   address.get('municipality'))
+            country = address.get('country', 'Unknown')
+            if city and city.strip():
+                return city, country
+    except Exception as e:
+        st.write(f"Debug: Nominatim failed: {e}")
+    
+    # Method 3: Try with Google Maps API (free tier with no key - limited)
+    try:
+        url = f"https://maps.googleapis.com/maps/api/geocode/json?latlng={lat},{lon}&sensor=false"
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            results = data.get('results', [])
+            if results:
+                components = results[0].get('address_components', [])
+                for component in components:
+                    if 'locality' in component.get('types', []):
+                        return component.get('long_name'), 'Bangladesh'
+    except Exception as e:
         pass
+    
     return 'Unknown', 'Unknown'
 
 st.title("🌾 CROP YIELD PREDICTION SYSTEM")
@@ -333,7 +375,7 @@ if data_entry_mode == "Auto-Detect from Location":
     </div>
     """, unsafe_allow_html=True)
     
-    st.info("ℹ️ Requesting your device location. Please allow location access when prompted by your browser.")
+    st.info("ℹ️ Requesting your device location. Browser will ask permission - please ALLOW to get accurate location data.")
     
     # Use streamlit_geolocation to get user's actual location
     loc = streamlit_geolocation()
@@ -344,6 +386,10 @@ if data_entry_mode == "Auto-Detect from Location":
     if loc and loc.get('latitude') and loc.get('longitude'):
         lat = loc['latitude']
         lon = loc['longitude']
+        
+        # Show coordinates while loading city name
+        st.info(f"📍 Coordinates received: {lat:.4f}, {lon:.4f} - Converting to city name...")
+        
         city, country = get_city_from_coordinates(lat, lon)
         
         location_data = {
