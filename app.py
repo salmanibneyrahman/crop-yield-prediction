@@ -198,37 +198,6 @@ st.markdown("""
         margin: 5px 0;
     }
 </style>
-
-<script>
-window.addEventListener('load', function() {
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-            function(position) {
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
-                
-                // Store in sessionStorage so Streamlit can access it
-                sessionStorage.setItem('user_lat', lat);
-                sessionStorage.setItem('user_lon', lon);
-                
-                // Fetch location name from coordinates
-                fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        const city = data.address.city || data.address.town || data.address.village || 'Unknown';
-                        const country = data.address.country || 'Unknown';
-                        sessionStorage.setItem('user_city', city);
-                        sessionStorage.setItem('user_country', country);
-                    })
-                    .catch(err => console.log('Could not fetch location name'));
-            },
-            function(error) {
-                console.log('Geolocation permission denied or unavailable');
-            }
-        );
-    }
-});
-</script>
 """, unsafe_allow_html=True)
 
 @st.cache_resource
@@ -251,27 +220,6 @@ def load_models_and_encoders():
     except Exception as e:
         st.error(f"Error loading models: {e}")
         return None
-
-def get_user_location_data():
-    """Get location from browser geolocation (stored in sessionStorage via JavaScript)"""
-    try:
-        # Try to get from JavaScript sessionStorage
-        lat = st.session_state.get('user_lat')
-        lon = st.session_state.get('user_lon')
-        city = st.session_state.get('user_city', 'Unknown')
-        country = st.session_state.get('user_country', 'Unknown')
-        
-        if lat and lon:
-            return {
-                'city': city,
-                'latitude': lat,
-                'longitude': lon,
-                'country': country
-            }
-    except:
-        pass
-    
-    return None
 
 def get_weather_data(latitude, longitude):
     """Fetch complete weather data from Open-Meteo API"""
@@ -297,6 +245,20 @@ def get_weather_data(latitude, longitude):
         pass
     
     return None
+
+def get_location_name(latitude, longitude):
+    """Get city and country name from coordinates"""
+    try:
+        url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={latitude}&lon={longitude}"
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            city = data.get('address', {}).get('city') or data.get('address', {}).get('town') or data.get('address', {}).get('village') or 'Unknown'
+            country = data.get('address', {}).get('country', 'Unknown')
+            return city, country
+    except:
+        pass
+    return 'Unknown', 'Unknown'
 
 st.title("🌾 CROP YIELD PREDICTION SYSTEM")
 
@@ -359,39 +321,39 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-data_entry_mode = st.radio("Select your preference", options=["Auto-Detect from Location", "Manual Entry"], key="entry_mode")
+data_entry_mode = st.radio("Select your preference", options=["Auto-Detect from GPS Coordinates", "Manual Entry"], key="entry_mode")
 
 st.markdown("---")
 
-if data_entry_mode == "Auto-Detect from Location":
+if data_entry_mode == "Auto-Detect from GPS Coordinates":
     st.markdown("""
     <div class="section-header">
-        Auto-Detect Mode - Getting Your Real Location...
+        Auto-Detect Mode - Enter GPS Coordinates
     </div>
     """, unsafe_allow_html=True)
     
-    st.info("ℹ️ Please allow location access in your browser for accurate geolocation. Click the permission prompt if it appears.")
+    col1, col2 = st.columns(2)
     
-    location_data = get_user_location_data()
-    weather_data = None
+    with col1:
+        st.subheader("📍 GPS Coordinates")
+        latitude = st.number_input("Latitude", value=23.8103, min_value=-90.0, max_value=90.0, step=0.0001, format="%.4f", help="Enter your latitude (e.g., 23.8103 for Dhaka)")
     
-    if location_data:
-        weather_data = get_weather_data(
-            location_data.get('latitude'),
-            location_data.get('longitude')
-        )
+    with col2:
+        st.subheader("📍 GPS Coordinates")
+        longitude = st.number_input("Longitude", value=90.4125, min_value=-180.0, max_value=180.0, step=0.0001, format="%.4f", help="Enter your longitude (e.g., 90.4125 for Dhaka)")
+    
+    # Get location name and weather
+    city, country = get_location_name(latitude, longitude)
+    weather_data = get_weather_data(latitude, longitude)
     
     col1, col2 = st.columns([1, 1])
     
     with col1:
         st.subheader("Detected Location")
-        if location_data:
-            st.write(f"**City:** {location_data.get('city', 'Unknown')}")
-            st.write(f"**Country:** {location_data.get('country', 'Unknown')}")
-            st.write(f"**Latitude:** {location_data.get('latitude'):.4f}")
-            st.write(f"**Longitude:** {location_data.get('longitude'):.4f}")
-        else:
-            st.warning("⚠️ Location not detected yet. Please allow browser location access or use Manual Entry mode.")
+        st.write(f"**City:** {city}")
+        st.write(f"**Country:** {country}")
+        st.write(f"**Latitude:** {latitude:.4f}")
+        st.write(f"**Longitude:** {longitude:.4f}")
         
         st.subheader("Weather Data")
         if weather_data:
