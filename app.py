@@ -6,37 +6,219 @@ from sklearn.preprocessing import LabelEncoder
 import requests
 from datetime import datetime
 
-st.set_page_config(page_title="Crop Yield Prediction System", page_icon="🌾", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(
+    page_title="Crop Yield Prediction System",
+    page_icon="wheat",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
 st.markdown("""
-<style>
-    .main-header {
-        font-size: 3rem !important;
-        font-weight: bold !important;
-        color: #2E7D32 !important;
-        text-align: center;
-        margin-bottom: 2rem !important;
+    <style>
+    :root {
+        --primary: #00d4ff;
+        --secondary: #00ff88;
+        --dark-bg: #0a0e27;
+        --card-bg: #1a1f3a;
+        --accent: #6366f1;
     }
-    .metric-card {
-        background: linear-gradient(135deg, #4CAF50, #45a049);
-        padding: 1.5rem;
+    
+    * {
+        margin: 0;
+        padding: 0;
+    }
+    
+    html, body, [data-testid="stAppViewContainer"] {
+        background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #0f2847 100%);
+        background-attachment: fixed;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    [data-testid="stHeader"] {
+        background: transparent;
+        border-bottom: 1px solid rgba(0, 212, 255, 0.1);
+    }
+    
+    h1 {
+        background: linear-gradient(135deg, #00d4ff 0%, #00ff88 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-weight: 900;
+        font-size: 3.5em !important;
+        text-shadow: 0 0 30px rgba(0, 212, 255, 0.3);
+        margin-bottom: 0.5em !important;
+        letter-spacing: 2px;
+    }
+    
+    h2 {
+        color: #00d4ff;
+        border-bottom: 2px solid rgba(0, 212, 255, 0.3);
+        padding-bottom: 10px;
+        font-weight: 700;
+        font-size: 1.8em;
+        letter-spacing: 1px;
+    }
+    
+    [data-testid="stColumn"] {
+        background: rgba(26, 31, 58, 0.5);
         border-radius: 15px;
-        color: white;
-        text-align: center;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        border: 1px solid rgba(0, 212, 255, 0.1);
+        backdrop-filter: blur(10px);
+        padding: 20px;
+        transition: all 0.3s ease;
     }
-</style>
+    
+    [data-testid="stColumn"]:hover {
+        border-color: rgba(0, 212, 255, 0.3);
+        box-shadow: 0 8px 32px rgba(0, 212, 255, 0.1);
+        transform: translateY(-5px);
+    }
+    
+    [data-testid="stNumberInput"] input,
+    [data-testid="stSlider"] input,
+    [data-testid="stSelectbox"] select {
+        background: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid rgba(0, 212, 255, 0.2) !important;
+        color: #00d4ff !important;
+        border-radius: 8px !important;
+        padding: 12px !important;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    [data-testid="stNumberInput"] input:focus,
+    [data-testid="stSlider"] input:focus,
+    [data-testid="stSelectbox"] select:focus {
+        border-color: #00d4ff !important;
+        box-shadow: 0 0 20px rgba(0, 212, 255, 0.3) !important;
+        background: rgba(0, 212, 255, 0.05) !important;
+    }
+    
+    body, p, span, div {
+        color: #e0e0ff;
+    }
+    
+    [data-testid="stDataFrame"] {
+        background: rgba(26, 31, 58, 0.7) !important;
+        border: 1px solid rgba(0, 212, 255, 0.2) !important;
+        border-radius: 10px !important;
+    }
+    
+    [data-testid="stMetric"] {
+        background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(0, 255, 136, 0.05));
+        border: 1px solid rgba(0, 212, 255, 0.2);
+        border-radius: 12px;
+        padding: 20px;
+        backdrop-filter: blur(10px);
+    }
+    
+    [data-testid="stMetricLabel"] {
+        color: #00d4ff !important;
+        font-weight: 700;
+    }
+    
+    [data-testid="stMetricValue"] {
+        color: #00ff88 !important;
+        font-size: 2.5em !important;
+    }
+    
+    [data-testid="stAlert"] {
+        background: rgba(255, 100, 100, 0.1) !important;
+        border: 1px solid rgba(255, 100, 100, 0.3) !important;
+        border-radius: 10px !important;
+        color: #ff6464 !important;
+    }
+    
+    hr {
+        border: none;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.3), transparent);
+        margin: 30px 0;
+    }
+    
+    .section-header {
+        background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(0, 255, 136, 0.05));
+        border-left: 4px solid #00d4ff;
+        padding: 15px;
+        border-radius: 8px;
+        margin: 20px 0;
+        font-weight: 700;
+        letter-spacing: 1px;
+    }
+    
+    .result-box {
+        background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(0, 255, 136, 0.05));
+        border: 2px solid #00d4ff;
+        border-radius: 12px;
+        padding: 20px;
+        margin: 15px 0;
+        box-shadow: 0 8px 32px rgba(0, 212, 255, 0.15);
+    }
+    
+    .crop-name {
+        color: #00ff88;
+        font-size: 1.8em;
+        font-weight: 900;
+        letter-spacing: 2px;
+    }
+    
+    .confidence-score {
+        color: #00d4ff;
+        font-size: 1.5em;
+        font-weight: 700;
+    }
+    
+    .image-container {
+        border-radius: 15px;
+        overflow: hidden;
+        border: 2px solid rgba(0, 212, 255, 0.3);
+        margin: 15px 0;
+    }
+    
+    .about-horizontal {
+        display: flex;
+        justify-content: space-around;
+        flex-wrap: wrap;
+        gap: 20px;
+        margin: 20px 0;
+    }
+    
+    .about-item {
+        flex: 1;
+        min-width: 250px;
+        background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(0, 255, 136, 0.05));
+        border: 1px solid rgba(0, 212, 255, 0.2);
+        border-radius: 12px;
+        padding: 20px;
+        text-align: center;
+    }
+    
+    .about-item h4 {
+        color: #00d4ff;
+        margin-bottom: 10px;
+        font-size: 1.1em;
+    }
+    
+    .about-item p {
+        color: #e0e0ff;
+        font-size: 0.95em;
+        line-height: 1.6;
+        margin: 5px 0;
+    }
+    </style>
 """, unsafe_allow_html=True)
 
 @st.cache_resource
 def load_models_and_encoders():
-    """Load trained models and encoders from .pkl files"""
     try:
         yield_model = joblib.load('yield_model.pkl')
         crop_model = joblib.load('crop_model.pkl')
+        
         le_crop = joblib.load('label_encoder_crop.pkl')
         le_season = joblib.load('label_encoder_season.pkl')
         le_district = joblib.load('label_encoder_district.pkl')
+        
         return {
             'yield': yield_model,
             'crop': crop_model,
@@ -49,33 +231,42 @@ def load_models_and_encoders():
         return None
 
 def get_user_location_data():
-    """Get location from browser geolocation (stored in sessionStorage via JavaScript)"""
-    try:
-        # Try to get from JavaScript sessionStorage
-        lat = st.session_state.get('user_lat')
-        lon = st.session_state.get('user_lon')
-        city = st.session_state.get('user_city', 'Unknown')
-        country = st.session_state.get('user_country', 'Unknown')
-        if lat and lon:
-            return {
-                'city': city,
-                'latitude': lat,
-                'longitude': lon,
-                'country': country
-            }
-    except:
-        pass
+    apis = [
+        {
+            'name': 'ipapi.co',
+            'url': 'https://ipapi.co/json',
+            'parser': lambda d: {'city': d.get('city'), 'latitude': d.get('latitude'), 'longitude': d.get('longitude')}
+        },
+        {
+            'name': 'ip-api.com',
+            'url': 'http://ip-api.com/json',
+            'parser': lambda d: {'city': d.get('city'), 'lat': d.get('lat'), 'lon': d.get('lon')}
+        }
+    ]
+    
+    for api in apis:
+        try:
+            response = requests.get(api['url'], timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                location = api['parser'](data)
+                if location['city']:
+                    return location
+        except:
+            continue
     return None
 
 def get_weather_data(latitude, longitude):
-    """Fetch complete weather data from Open-Meteo API"""
     try:
         url = f"https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current=temperature_2m,relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min,relative_humidity_2m_max,relative_humidity_2m_min"
+        
         response = requests.get(url, timeout=5)
+        
         if response.status_code == 200:
             data = response.json()
             current = data.get('current', {})
             daily = data.get('daily', {})
+            
             weather = {
                 'avg_temp': current.get('temperature_2m'),
                 'min_temp': daily.get('temperature_2m_min', [None])[0] if daily.get('temperature_2m_min') else None,
@@ -84,179 +275,292 @@ def get_weather_data(latitude, longitude):
                 'min_humidity': daily.get('relative_humidity_2m_min', [None])[0] if daily.get('relative_humidity_2m_min') else None,
                 'max_humidity': daily.get('relative_humidity_2m_max', [None])[0] if daily.get('relative_humidity_2m_max') else None
             }
+            
             return weather
     except:
         pass
     return None
 
-# Load models
-models = load_models_and_encoders()
-if models is None:
-    st.stop()
-
-st.markdown('<h1 class="main-header">🌾 CROP YIELD PREDICTION SYSTEM</h1>', unsafe_allow_html=True)
-
-# Metrics display (keeping your exact design)
-col1, col2, col3, col4 = st.columns(4)
-with col1:
-    st.markdown("""
-    <div class="metric-card">
-        <h3>Decision Tree</h3>
-        <h2>R² Score: 0.8687</h2>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col2:
-    st.markdown("""
-    <div class="metric-card">
-        <h3>KNN Classifier</h3>
-        <h2>Accuracy: 0.8714</h2>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col3:
-    st.markdown("""
-    <div class="metric-card">
-        <h3>Records</h3>
-        <h2>181,385</h2>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col4:
-    st.markdown("""
-    <div class="metric-card">
-        <h3>Location</h3>
-        <h2>Bangladesh</h2>
-    </div>
-    """, unsafe_allow_html=True)
+st.title("CROP YIELD PREDICTION SYSTEM")
 
 st.markdown("""
-**This advanced agricultural prediction system combines machine learning with real-time weather data to provide accurate crop yield forecasts and crop recommendations.**
-
-The system is trained on comprehensive agricultural data from Bangladesh and uses proven machine learning algorithms to deliver reliable predictions for farmers and agricultural planners.
-
-**Built for Agricultural Intelligence**
-""")
-
-# Main prediction interface
-st.markdown("---")
-tab1, tab2 = st.tabs(["🌱 Crop Recommendation", "📊 Yield Prediction"])
-
-with tab1:
-    st.subheader("Get Crop Recommendations")
-    
-    # User inputs for crop recommendation
-    season = st.selectbox("Select Season", 
-                         [' Kharif', 'Rabi', 'Summer & Winter'])
-    district = st.selectbox("Select District", 
-                           ['Barisal', 'Bhola', 'Bogra', 'Brahmanbaria', 'Chandpur', 'Chapainawabganj', 'Cumilla', 'Dhaka', 
-                            'Dinajpur', 'Faridpur', 'Feni', 'Gaibandha', 'Gazipur', 'Gopalganj', 'Habiganj', 
-                            'Jamalpur', 'Jessore', 'Jhalakati', 'Jhenaidah', 'Joypurhat', 'Khagrachari', 'Khulna', 
-                            'Kishoreganj', 'Kurigram', 'Kushtia', 'Lakshmipur', 'Lalmonirhat', 'Madaripur', 
-                            'Magura', 'Manikganj', 'Meherpur', 'Moulvibazar', 'Munshiganj', 'Mymensingh', 
-                            'Naogaon', 'Narail', 'Narayanganj', 'Narsingdi', 'Natore', 'Nawabganj', 'Netrakona', 
-                            'Nilphamari', 'Noakhali', 'Pabna', 'Panchagarh', 'Patuakhali', 'Pirojpur', 'Rajbari', 
-                            'Rajshahi', 'Rangamati', 'Rangpur', 'Satkhira', 'Shariatpur', 'Sherpur', 'Sirajganj', 
-                            'Sunamganj', 'Sylhet', 'Tangail', 'Thakurgaon'])
-    
-    # Predict crop
-    if st.button("🔮 Recommend Best Crop", type="primary"):
-        try:
-            # Create feature vector for crop model (adjust based on your training features)
-            season_encoded = models['season_encoder'].transform([season])[0]
-            district_encoded = models['district_encoder'].transform([district])[0]
-            
-            # FIX: Ensure correct number of features for crop model (typically fewer features)
-            crop_features = np.array([[season_encoded, district_encoded]])
-            
-            crop_pred = models['crop'].predict(crop_features)
-            recommended_crop = models['crop_encoder'].inverse_transform(crop_pred)[0]
-            
-            st.success(f"**Recommended Crop: {recommended_crop}**")
-            st.balloons()
-        except Exception as e:
-            st.error(f"Prediction error: {str(e)}")
-
-with tab2:
-    st.subheader("Predict Crop Yield")
-    
-    # User inputs for yield prediction
-    col_a, col_b = st.columns(2)
-    with col_a:
-        crop = st.selectbox("Select Crop", 
-                           ['Rice', 'Wheat', 'Maize', 'Jute', 'Potato', 'Pulses', 'Sugarcane', 'Oil seed', 'Tea', 'Vegetables'])
-        area = st.number_input("Area (Hectare)", min_value=0.1, value=1.0, step=0.1)
-    
-    with col_b:
-        production = st.number_input("Production (Ton)", min_value=0.0, value=1.0, step=0.1)
-        season_yield = st.selectbox("Season", 
-                                   [' Kharif', 'Rabi', 'Summer & Winter'], key="season_yield")
-    
-    district_yield = st.selectbox("District", 
-                                 ['Barisal', 'Bhola', 'Bogra', 'Brahmanbaria', 'Chandpur', 'Chapainawabganj', 'Cumilla', 'Dhaka'], key="district_yield")
-    
-    # Get location and weather
-    location_data = get_user_location_data()
-    weather_data = None
-    if location_data:
-        lat, lon = location_data['latitude'], location_data['longitude']
-        with st.spinner("Fetching real-time weather data..."):
-            weather_data = get_weather_data(lat, lon)
-    
-    # Predict yield
-    if st.button("📈 Predict Yield", type="primary"):
-        try:
-            # Encode categorical features
-            crop_encoded = models['crop_encoder'].transform([crop])[0]
-            season_encoded = models['season_encoder'].transform([season_yield])[0]
-            district_encoded = models['district_encoder'].transform([district_yield])[0]
-            
-            # FIX: Create exactly 9 features to match DecisionTreeRegressor expectation
-            # Order: [area, production, crop_encoded, season_encoded, district_encoded, weather_temp, weather_humidity, year, extra_feature]
-            current_year = datetime.now().year
-            weather_temp = weather_data['avg_temp'] if weather_data and weather_data['avg_temp'] else 25.0
-            weather_humidity = weather_data['avg_humidity'] if weather_data and weather_data['avg_humidity'] else 70.0
-            
-            # Pad with default/derived features to make exactly 9 features
-            yield_features = np.array([[
-                area,                    # feature 1
-                production,              # feature 2  
-                crop_encoded,            # feature 3
-                season_encoded,          # feature 4
-                district_encoded,        # feature 5
-                weather_temp,            # feature 6 (weather)
-                weather_humidity,        # feature 7 (weather)
-                current_year % 100,      # feature 8 (year feature)
-                area * 0.1               # feature 9 (derived feature)
-            ]])
-            
-            # Make prediction
-            predicted_yield = models['yield'].predict(yield_features)[0]
-            
-            # Display results
-            st.markdown("---")
-            col_pred1, col_pred2, col_pred3 = st.columns(3)
-            
-            with col_pred1:
-                st.metric("Predicted Yield (Ton/ha)", f"{predicted_yield:.2f}")
-            with col_pred2:
-                st.metric("Area", f"{area:.2f} ha")
-            with col_pred3:
-                st.metric("Total Production", f"{predicted_yield * area:.2f} Ton")
-            
-            if weather_data:
-                st.info(f"**Weather Data Used:** 🌡️ {weather_data['avg_temp']}°C, 💧 {weather_data['avg_humidity']}% humidity")
-            
-            st.success("✅ Prediction completed successfully!")
-            
-        except Exception as e:
-            st.error(f"❌ Prediction error: {str(e)}")
-            st.info("**Debug info:** Check that your model was trained with exactly 9 features in this order: [area, production, crop, season, district, temp, humidity, year, derived]")
-
-# Footer
-st.markdown("---")
-st.markdown("""
-<div style='text-align: center; color: #666; padding: 2rem;'>
-    <p>🛠️ Built with Streamlit | 🌍 Optimized for Bangladesh Agriculture | 📈 ML-Powered Predictions</p>
+<div class="image-container">
+    <img src="https://images.unsplash.com/photo-1574943320219-553eb213f72d?w=1200&q=80" style="width:100%; height:300px; object-fit:cover; border-radius:15px;" alt="Agriculture">
 </div>
 """, unsafe_allow_html=True)
+
+st.markdown("---")
+
+with st.expander("About System"):
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("""
+        <div class="about-item">
+            <h4>Yield Model</h4>
+            <p><strong>Type:</strong> Decision Tree</p>
+            <p><strong>R Score:</strong> 0.8687</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown("""
+        <div class="about-item">
+            <h4>Crop Model</h4>
+            <p><strong>Type:</strong> KNN Classifier</p>
+            <p><strong>Accuracy:</strong> 0.8714</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown("""
+        <div class="about-item">
+            <h4>Training Data</h4>
+            <p><strong>Records:</strong> 181,385</p>
+            <p><strong>Location:</strong> Bangladesh</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(0, 255, 136, 0.05)); border: 1px solid rgba(0, 212, 255, 0.2); border-radius: 12px; padding: 20px; margin: 15px 0;">
+    <h4 style="color: #00d4ff; margin-bottom: 15px;">About This System</h4>
+    <p style="color: #e0e0ff; line-height: 1.8; margin-bottom: 15px;">This advanced agricultural prediction system combines machine learning with real-time weather data to provide accurate crop yield forecasts and crop recommendations.</p>
+    
+    <p style="color: #e0e0ff; line-height: 1.8; margin-bottom: 15px;">The system is trained on comprehensive agricultural data from Bangladesh and uses proven machine learning algorithms to deliver reliable predictions for farmers and agricultural planners.</p>
+    
+    <p style="text-align: center; color: #00ff88; font-weight: bold; margin-top: 20px;">Built for Agricultural Intelligence</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.markdown("---")
+
+models = load_models_and_encoders()
+
+if models is None:
+    st.error("Could not load models. Please ensure all .pkl files are in the same folder as app.py")
+    st.stop()
+
+st.markdown("""
+<div class="section-header">
+    How do you want to enter data?
+</div>
+""", unsafe_allow_html=True)
+
+data_entry_mode = st.radio(
+    "Select your preference:",
+    options=["Auto-Detect from Location", "Manual Entry"],
+    key="entry_mode"
+)
+
+st.markdown("---")
+
+weather_data = None
+
+if data_entry_mode == "Auto-Detect from Location":
+    st.markdown("""
+    <div class="section-header">
+        Auto-Detect Mode - Fetching Your Location...
+    </div>
+    """, unsafe_allow_html=True)
+    
+    location_data = get_user_location_data()
+    
+    if location_data:
+        weather_data = get_weather_data(
+            location_data.get('latitude') or location_data.get('lat'), 
+            location_data.get('longitude') or location_data.get('lon')
+        )
+    
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        st.subheader("Detected Location")
+        if location_data:
+            st.write(f"**City:** {location_data['city']}")
+            st.write(f"**Latitude:** {location_data.get('latitude') or location_data.get('lat')}")
+            st.write(f"**Longitude:** {location_data.get('longitude') or location_data.get('lon')}")
+        else:
+            st.warning("Could not auto-detect location")
+            
+        st.subheader("Weather Data")
+        if weather_data:
+            st.write(f"**Avg Temp:** {weather_data['avg_temp']:.1f}C")
+            st.write(f"**Min Temp:** {weather_data['min_temp']:.1f}C")
+            st.write(f"**Max Temp:** {weather_data['max_temp']:.1f}C")
+            st.write(f"**Avg Humidity:** {weather_data['avg_humidity']:.0f}%")
+        else:
+            st.warning("Could not fetch weather data")
+    
+    with col2:
+        st.subheader("Manual Inputs Required")
+        
+        available_districts = list(models['district_encoder'].classes_)
+        selected_district = st.selectbox(
+            "Select District",
+            options=available_districts,
+            key="district_auto"
+        )
+        
+        area_hectares = st.number_input(
+            "Cultivated Area (hectares)",
+            value=100000.0,
+            min_value=0.5,
+            max_value=10000000.0,
+            step=1000.0
+        )
+        
+        available_seasons = list(models['season_encoder'].classes_)
+        selected_season = st.selectbox(
+            "Select Season",
+            options=available_seasons,
+            key="season_auto"
+        )
+
+else:
+    st.markdown("""
+    <div class="section-header">
+        Manual Entry Mode - Enter Your Farm Details
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        available_districts = list(models['district_encoder'].classes_)
+        selected_district = st.selectbox(
+            "District",
+            options=available_districts,
+            key="district_manual"
+        )
+        
+        area_hectares = st.number_input(
+            "Cultivated Area (hectares)",
+            value=100000.0,
+            min_value=0.5,
+            max_value=10000000.0,
+            step=1000.0,
+            key="area_manual"
+        )
+        
+        available_seasons = list(models['season_encoder'].classes_)
+        selected_season = st.selectbox(
+            "Season",
+            options=available_seasons,
+            key="season_manual"
+        )
+    
+    with col2:
+        st.subheader("Temperature Conditions (Celsius)")
+        col_min, col_avg, col_max = st.columns(3)
+        
+        with col_min:
+            min_temp = st.number_input("Min Temp", value=18.0, key="temp_min_manual")
+        
+        with col_avg:
+            avg_temp = st.number_input("Avg Temp", value=25.0, key="temp_avg_manual")
+        
+        with col_max:
+            max_temp = st.number_input("Max Temp", value=32.0, key="temp_max_manual")
+        
+        st.subheader("Humidity Conditions (Percent)")
+        col_min_hum, col_avg_hum, col_max_hum = st.columns(3)
+        
+        with col_min_hum:
+            min_humidity = st.number_input("Min Humidity", value=40, min_value=0, max_value=100, key="hum_min_manual")
+        
+        with col_avg_hum:
+            avg_humidity = st.number_input("Avg Humidity", value=70, min_value=0, max_value=100, key="hum_avg_manual")
+        
+        with col_max_hum:
+            max_humidity = st.number_input("Max Humidity", value=95, min_value=0, max_value=100, key="hum_max_manual")
+        
+        weather_data = {
+            'min_temp': min_temp,
+            'avg_temp': avg_temp,
+            'max_temp': max_temp,
+            'min_humidity': min_humidity,
+            'avg_humidity': avg_humidity,
+            'max_humidity': max_humidity
+        }
+
+st.markdown("---")
+
+st.markdown("""
+<div class="section-header">
+    Get Predictions
+</div>
+""", unsafe_allow_html=True)
+
+predict_button = st.button(
+    "Predict Crop and Yield",
+    use_container_width=True,
+    key="predict_btn"
+)
+
+if predict_button:
+    try:
+        season_encoded = models['season_encoder'].transform([selected_season])[0]
+        district_encoded = models['district_encoder'].transform([selected_district])[0]
+        
+        yield_features = np.array([[area_hectares, weather_data['avg_temp'], weather_data['avg_humidity'], weather_data['max_temp'], weather_data['min_temp'], weather_data['max_humidity'], weather_data['min_humidity']]])
+        crop_features = np.array([[weather_data['avg_temp'], weather_data['avg_humidity'], weather_data['max_temp'], weather_data['min_temp'], weather_data['max_humidity'], weather_data['min_humidity'], season_encoded, district_encoded]])
+        
+        predicted_yield = models['yield'].predict(yield_features)[0]
+        total_production = predicted_yield * area_hectares
+        
+        crop_pred_idx = models['crop'].predict(crop_features)[0]
+        recommended_crop = models['crop_encoder'].inverse_transform([int(crop_pred_idx)])[0]
+        
+        if hasattr(models['crop'], 'predict_proba'):
+            probas = models['crop'].predict_proba(crop_features)[0]
+            confidence = f"{probas.max():.1f}%"
+        else:
+            confidence = "N/A"
+        
+        st.markdown("---")
+        st.markdown("""
+        <div class="result-box">
+        <h3 style="color: #00ff88; margin-bottom: 10px;">Prediction Results</h3>
+        """, unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.metric("Recommended Crop", recommended_crop.upper(), f"Confidence: {confidence}")
+        
+        with col2:
+            st.metric("Predicted Yield", f"{predicted_yield:.2f}", "tons/hectare")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        st.markdown("""
+        <div class="result-box">
+        <h3 style="color: #00d4ff; margin-bottom: 20px;">Production Forecast</h3>
+        """, unsafe_allow_html=True)
+        
+        col_prod1, col_prod2, col_prod3 = st.columns(3)
+        
+        with col_prod1:
+            st.metric("Total Production", f"{total_production:.0f}", "tons")
+        
+        with col_prod2:
+            st.metric("Area", f"{area_hectares:.0f}", "hectares")
+        
+        with col_prod3:
+            st.metric("Season", selected_season, "")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        st.subheader("Farm Summary")
+        summary_df = pd.DataFrame({
+            'Parameter': ['District', 'Season', 'Area (hectares)', 'Min Temp (C)', 'Avg Temp (C)', 'Max Temp (C)', 'Min Humidity (%)', 'Avg Humidity (%)', 'Max Humidity (%)'],
+            'Value': [selected_district, selected_season, f"{area_hectares:.0f}", f"{weather_data['min_temp']:.1f}", f"{weather_data['avg_temp']:.1f}", f"{weather_data['max_temp']:.1f}", f"{weather_data['min_humidity']}", f"{weather_data['avg_humidity']}", f"{weather_data['max_humidity']}"]
+        })
+        st.dataframe(summary_df, use_container_width=True, hide_index=True)
+    
+    except Exception as e:
+        st.error(f"Error making predictions: {str(e)}")
