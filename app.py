@@ -15,74 +15,42 @@ st.set_page_config(
 )
 
 # ============================================================================
-# LOAD MODELS & ENCODERS
+# LOAD MODELS & ENCODERS (FIXED - 3 files only)
 # ============================================================================
 @st.cache_resource
 def load_models():
     try:
         yield_model = joblib.load("yield_model.pkl")
         crop_model = joblib.load("crop_model.pkl")
-
         le_crop = joblib.load("label_encoder_crop.pkl")
-        le_season = joblib.load("label_encoder_season.pkl")
-        le_district = joblib.load("label_encoder_district.pkl")
-
+        
         return {
             "yield": yield_model,
             "crop": crop_model,
-            "crop_encoder": le_crop,
-            "season_encoder": le_season,
-            "district_encoder": le_district,
+            "crop_encoder": le_crop
         }
     except Exception as e:
         st.error(f"Error loading models/encoders: {e}")
-        return None
-
+        st.stop()
 
 models = load_models()
-if models is None:
-    st.stop()
 
 # ============================================================================
 # SAFE LOCATION + WEATHER HELPERS
 # ============================================================================
-
 @st.cache_data(ttl=600)
 def get_user_location():
-    """
-    Try multiple IP geolocation APIs.
-    NOTE: On Streamlit Cloud / GitHub hosting this usually returns
-    the **server** location (not the end-user), so treat as approximate only.
-    """
+    """Try multiple IP geolocation APIs."""
     apis = [
-        # IPAPI (HTTPS, often works)
-        {
-            "name": "ipapi.co",
-            "url": "https://ipapi.co/json",
-            "parser": lambda d: {
-                "city": d.get("city"),
-                "country": d.get("country_name"),
-                "lat": d.get("latitude"),
-                "lon": d.get("longitude"),
-            },
-        },
-        # IPINFO (HTTPS)
-        {
-            "name": "ipinfo.io",
-            "url": "https://ipinfo.io/json",
-            "parser": lambda d: {
-                "city": d.get("city"),
-                "country": d.get("country"),
-                "lat": float(d.get("loc", "0,0").split(",")[0])
-                if d.get("loc")
-                else None,
-                "lon": float(d.get("loc", "0,0").split(",")[1])
-                if d.get("loc")
-                else None,
-            },
-        },
+        {"name": "ipapi.co", "url": "https://ipapi.co/json", 
+         "parser": lambda d: {"city": d.get("city"), "country": d.get("country_name"), 
+                              "lat": d.get("latitude"), "lon": d.get("longitude")}},
+        {"name": "ipinfo.io", "url": "https://ipinfo.io/json",
+         "parser": lambda d: {"city": d.get("city"), "country": d.get("country"),
+                              "lat": float(d.get("loc", "0,0").split(",")[0]) if d.get("loc") else None,
+                              "lon": float(d.get("loc", "0,0").split(",")[1]) if d.get("loc") else None}}
     ]
-
+    
     for api in apis:
         try:
             r = requests.get(api["url"], timeout=5)
@@ -93,31 +61,21 @@ def get_user_location():
                     return loc
         except Exception:
             continue
-
     return None
-
 
 @st.cache_data(ttl=600)
 def get_weather(lat: float, lon: float):
-    """
-    Fetch basic weather (temp & humidity) from Open-Meteo.
-    """
+    """Fetch basic weather from Open-Meteo."""
     try:
-        url = (
-            "https://api.open-meteo.com/v1/forecast"
-            f"?latitude={lat}&longitude={lon}"
-            "&current=temperature_2m,relative_humidity_2m"
-            "&daily=temperature_2m_max,temperature_2m_min,"
-            "relative_humidity_2m_max,relative_humidity_2m_min"
-        )
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min,relative_humidity_2m_max,relative_humidity_2m_min"
         r = requests.get(url, timeout=8)
         if r.status_code != 200:
             return None
-
+        
         data = r.json()
         current = data.get("current", {})
         daily = data.get("daily", {})
-
+        
         return {
             "avg_temp": current.get("temperature_2m"),
             "avg_humidity": current.get("relative_humidity_2m"),
@@ -129,21 +87,17 @@ def get_weather(lat: float, lon: float):
     except Exception:
         return None
 
-
 # ============================================================================
 # HEADER
 # ============================================================================
 st.title("🌾 Bangladesh Crop & Yield Intelligence System")
 
-st.markdown(
-    """
-This app uses machine learning models trained on **Bangladesh SPAS data**  
+st.markdown("""
+This app uses machine learning models trained on **Bangladesh SPAS data** 
 to recommend suitable crops and estimate yield (tons/hectare).
 
-- You can use **Auto mode** (approximate location from IP) or  
-- **Manual mode** (you control all inputs – recommended for accuracy).
-"""
-)
+**Weather-based predictions** - no district/season encoders needed!
+""")
 
 st.markdown("---")
 
@@ -157,167 +111,80 @@ mode = st.radio(
 )
 
 st.markdown(
-    "> ℹ️ On public hosting (Streamlit Cloud / GitHub), auto-detected location "
-    "often reflects the **server**, not your exact device. Use **Manual** for accuracy."
+    "> ℹ️ On public hosting, auto-location shows **server** location. Use **Manual** for accuracy."
 )
 
 st.markdown("---")
 
 # ============================================================================
-# COLLECT INPUTS
+# COLLECT INPUTS (FIXED - no district/season)
 # ============================================================================
-available_districts = list(models["district_encoder"].classes_)
-available_seasons = list(models["season_encoder"].classes_)
-
 col_left, col_right = st.columns(2)
 
-# Shared inputs (district, season, area)
+# Area input only (left column)
 with col_left:
-    st.subheader("Farm & Season")
-    district = st.selectbox("District", options=available_districts)
-    season = st.selectbox("Season", options=available_seasons)
+    st.subheader("🌾 Farm Details")
     area_ha = st.number_input(
         "Cultivated Area (hectares)",
-        min_value=0.1,
-        max_value=1_000_000.0,
-        value=10_000.0,
-        step=100.0,
+        min_value=0.1, max_value=1_000_000.0, value=10_000.0, step=100.0
     )
 
+# Weather inputs (right column)
 with col_right:
-    st.subheader("Weather Conditions (°C, %)")
+    st.subheader("🌤️ Weather Conditions (°C, %)")
     if mode == "Auto (approximate from IP)":
         loc = get_user_location()
         if loc is not None:
-            st.info(
-                f"Approximate server location: **{loc.get('city', 'Unknown')}, "
-                f"{loc.get('country', 'Unknown')}**  \n"
-                "Note: On cloud hosting this is usually **not your device location**."
-            )
+            st.info(f"📍 Detected: **{loc.get('city', 'Unknown')}, {loc.get('country', 'Unknown')}**")
             weather = get_weather(loc["lat"], loc["lon"])
         else:
-            st.warning("Could not detect location. Please switch to Manual mode.")
+            st.warning("Could not detect location.")
             weather = None
 
         if weather is not None:
-            st.write(
-                f"Detected Avg Temp: **{weather['avg_temp']:.1f}°C**, "
-                f"Avg Humidity: **{weather['avg_humidity']:.0f}%**"
-            )
-
-            min_temp = st.number_input(
-                "Min Temp (°C)",
-                value=float(weather["min_temp"])
-                if weather["min_temp"] is not None
-                else 20.0,
-            )
-            avg_temp = st.number_input(
-                "Avg Temp (°C)",
-                value=float(weather["avg_temp"]) if weather["avg_temp"] is not None else 25.0,
-            )
-            max_temp = st.number_input(
-                "Max Temp (°C)",
-                value=float(weather["max_temp"])
-                if weather["max_temp"] is not None
-                else 32.0,
-            )
-
-            min_humidity = st.number_input(
-                "Min Humidity (%)",
-                min_value=0,
-                max_value=100,
-                value=int(weather["min_humidity"])
-                if weather["min_humidity"] is not None
-                else 40,
-            )
-            avg_humidity = st.number_input(
-                "Avg Humidity (%)",
-                min_value=0,
-                max_value=100,
-                value=int(weather["avg_humidity"])
-                if weather["avg_humidity"] is not None
-                else 70,
-            )
-            max_humidity = st.number_input(
-                "Max Humidity (%)",
-                min_value=0,
-                max_value=100,
-                value=int(weather["max_humidity"])
-                if weather["max_humidity"] is not None
-                else 95,
-            )
+            st.success(f"Detected: **{weather['avg_temp']:.1f}°C**, **{weather['avg_humidity']:.0f}%** humidity")
+            
+            # Pre-fill with detected weather
+            min_temp = st.number_input("Min Temp (°C)", value=float(weather["min_temp"] or 20.0))
+            avg_temp = st.number_input("Avg Temp (°C)", value=float(weather["avg_temp"] or 25.0))
+            max_temp = st.number_input("Max Temp (°C)", value=float(weather["max_temp"] or 32.0))
+            min_humidity = st.number_input("Min Humidity (%)", 0, 100, int(weather["min_humidity"] or 40))
+            avg_humidity = st.number_input("Avg Humidity (%)", 0, 100, int(weather["avg_humidity"] or 70))
+            max_humidity = st.number_input("Max Humidity (%)", 0, 100, int(weather["max_humidity"] or 95))
         else:
-            # Fallback manual controls
-            st.warning("Falling back to manual weather input.")
+            # Fallback manual
             min_temp = st.number_input("Min Temp (°C)", value=20.0)
             avg_temp = st.number_input("Avg Temp (°C)", value=26.0)
             max_temp = st.number_input("Max Temp (°C)", value=32.0)
-
-            min_humidity = st.number_input(
-                "Min Humidity (%)", min_value=0, max_value=100, value=40
-            )
-            avg_humidity = st.number_input(
-                "Avg Humidity (%)", min_value=0, max_value=100, value=70
-            )
-            max_humidity = st.number_input(
-                "Max Humidity (%)", min_value=0, max_value=100, value=95
-            )
-
+            min_humidity = st.number_input("Min Humidity (%)", 0, 100, 40)
+            avg_humidity = st.number_input("Avg Humidity (%)", 0, 100, 70)
+            max_humidity = st.number_input("Max Humidity (%)", 0, 100, 95)
     else:  # Manual mode
         min_temp = st.number_input("Min Temp (°C)", value=20.0)
         avg_temp = st.number_input("Avg Temp (°C)", value=26.0)
         max_temp = st.number_input("Max Temp (°C)", value=32.0)
-
-        min_humidity = st.number_input(
-            "Min Humidity (%)", min_value=0, max_value=100, value=40
-        )
-        avg_humidity = st.number_input(
-            "Avg Humidity (%)", min_value=0, max_value=100, value=70
-        )
-        max_humidity = st.number_input(
-            "Max Humidity (%)", min_value=0, max_value=100, value=95
-        )
+        min_humidity = st.number_input("Min Humidity (%)", 0, 100, 40)
+        avg_humidity = st.number_input("Avg Humidity (%)", 0, 100, 70)
+        max_humidity = st.number_input("Max Humidity (%)", 0, 100, 95)
 
 st.markdown("---")
 
 # ============================================================================
-# PREDICT BUTTON
+# PREDICT BUTTON (FIXED - weather only)
 # ============================================================================
 if st.button("🔮 Predict Recommended Crop & Yield", use_container_width=True):
     try:
-        # Encode season & district
-        season_code = models["season_encoder"].transform([season])[0]
-        district_code = models["district_encoder"].transform([district])[0]
-
-        # Build feature arrays
-        yield_features = np.array(
-            [
-                [
-                    area_ha,
-                    avg_temp,
-                    avg_humidity,
-                    max_temp,
-                    min_temp,
-                    max_humidity,
-                    min_humidity,
-                ]
-            ]
-        )
-
-        crop_features = np.array(
-            [
-                [
-                    avg_temp,
-                    avg_humidity,
-                    max_temp,
-                    min_temp,
-                    max_humidity,
-                    min_humidity,
-                    season_code,
-                    district_code,
-                ]
-            ]
-        )
+        # Yield prediction (7 features: area + 6 weather)
+        yield_features = np.array([[
+            area_ha, avg_temp, avg_humidity, max_temp, 
+            min_temp, max_humidity, min_humidity
+        ]])
+        
+        # Crop prediction (6 weather features ONLY)
+        crop_features = np.array([[
+            avg_temp, avg_humidity, max_temp, 
+            min_temp, max_humidity, min_humidity
+        ]])
 
         # Predictions
         yield_per_ha = float(models["yield"].predict(yield_features)[0])
@@ -326,53 +193,35 @@ if st.button("🔮 Predict Recommended Crop & Yield", use_container_width=True):
         crop_idx = int(models["crop"].predict(crop_features)[0])
         crop_name = models["crop_encoder"].inverse_transform([crop_idx])[0]
 
-        # Confidence (if supported)
+        # Confidence
+        conf_str = "N/A"
         if hasattr(models["crop"], "predict_proba"):
             proba = models["crop"].predict_proba(crop_features)[0]
-            conf = proba.max() * 100
-            conf_str = f"{conf:.1f}%"
-        else:
-            conf_str = "N/A"
+            conf_str = f"{proba.max()*100:.1f}%"
 
-        # Display results
-        st.subheader("Results")
-
+        # Results
+        st.subheader("✅ Prediction Results")
         c1, c2, c3 = st.columns(3)
+        
         with c1:
-            st.metric("Recommended Crop", crop_name.upper(), f"Confidence: {conf_str}")
+            st.metric("🥬 Recommended Crop", crop_name.upper(), f"Conf: {conf_str}")
         with c2:
-            st.metric("Yield (tons / ha)", f"{yield_per_ha:.2f}")
+            st.metric("📈 Yield (tons/ha)", f"{yield_per_ha:.2f}")
         with c3:
-            st.metric("Total Production (tons)", f"{total_production:,.0f}")
+            st.metric("🚛 Total Production", f"{total_production:,.0f} tons")
 
-        st.markdown("### Input Summary")
-        summary_df = pd.DataFrame(
-            {
-                "Parameter": [
-                    "District",
-                    "Season",
-                    "Area (ha)",
-                    "Min Temp (°C)",
-                    "Avg Temp (°C)",
-                    "Max Temp (°C)",
-                    "Min Humidity (%)",
-                    "Avg Humidity (%)",
-                    "Max Humidity (%)",
-                ],
-                "Value": [
-                    district,
-                    season,
-                    f"{area_ha:,.1f}",
-                    f"{min_temp:.1f}",
-                    f"{avg_temp:.1f}",
-                    f"{max_temp:.1f}",
-                    f"{min_humidity}",
-                    f"{avg_humidity}",
-                    f"{max_humidity}",
-                ],
-            }
-        )
+        # Input summary
+        st.markdown("### 📋 Input Summary")
+        summary_df = pd.DataFrame({
+            "Parameter": ["Area (ha)", "Min Temp (°C)", "Avg Temp (°C)", "Max Temp (°C)", 
+                         "Min Humidity (%)", "Avg Humidity (%)", "Max Humidity (%)"],
+            "Value": [f"{area_ha:,.1f}", f"{min_temp:.1f}", f"{avg_temp:.1f}", 
+                     f"{max_temp:.1f}", f"{min_humidity}", f"{avg_humidity}", f"{max_humidity}"]
+        })
         st.dataframe(summary_df, hide_index=True, use_container_width=True)
 
     except Exception as e:
-        st.error(f"Error during prediction: {e}")
+        st.error(f"❌ Prediction error: {e}")
+
+st.markdown("---")
+st.markdown("*Powered by Bangladesh SPAS agricultural data & ML models*")
